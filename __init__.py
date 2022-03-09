@@ -221,7 +221,7 @@ def plot(name):
         plt.ylabel(ylabel)
         yunits = _extract_units(ylabel)
         lnames = names.split()
-        for corner in config['corners']:
+        for corner in config['corners'].split():
             cdir = os.path.join(_results_dir(), corner)
             wnames = []
             for lname in lnames:
