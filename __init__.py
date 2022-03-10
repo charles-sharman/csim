@@ -30,7 +30,7 @@ except:
     pptx = None
 import copy
 
-config = {'project': '.', 'corners': '', 'typical_corner': '', 'local_corner': ''}
+config = {'project': '.', 'corners': '', 'typical_corner': '', 'current_corner': ''}
 
 # Local Functions
 
@@ -55,6 +55,25 @@ def _wildcard_expand(name, possibles):
         print('Warning: Can only process one wildcard')
         return []
 
+def _strip_file(name):
+    """
+    Rudimentary file stripper. Currently,
+        * Removes comments
+        * Skips blank space
+    """
+    fp = open(name, 'r')
+    retval = []
+    for line in fp:
+        # Strip Comment
+        cindex = line.find('#')
+        if cindex > -1:
+            line = line[:cindex]
+        line = line.strip()
+        if line:
+            retval.append(line)
+    fp.close()
+    return retval
+
 def _extract_units(s):
     """
     Extracts the units from a label.
@@ -72,6 +91,8 @@ def unit_adj(number, units):
     uindex = 'fpnum kMGT'.find(units[0])
     if uindex > -1:
         m = 10**(-3*(uindex-5))
+    elif units == '%':
+        m = 100
     else:
         m = 1
     return number * m
@@ -124,7 +145,7 @@ def crosses(w, y, edge=0):
 
 def _set_corner(corner=''):
     global config
-    if not corner:
+    if corner=='':
         corner = config['current_corner']
     return corner
 
@@ -149,6 +170,7 @@ def _read_specs(corner=''):
     return retval
 
 def read_spec(name, corner=''):
+    corner = _set_corner(corner)
     try:
         retval = _read_specs(corner)[name]
     except:
@@ -157,6 +179,7 @@ def read_spec(name, corner=''):
     return retval
 
 def write_spec(value, name, corner=''):
+    corner = _set_corner(corner)
     specs = _read_specs(corner)
     specs[name] = value
     write_dir = _check_dir(corner)
@@ -191,6 +214,23 @@ def write_wave(w, name, corner=''):
         fp.write(str(w[count,0]) + ' ' + str(w[count,1]) + '\n')
     fp.close()
 
+# Evaluation
+
+def script(name, corners=''):
+    global config
+    
+    if corners=='':
+        corners = config['corners']
+    lines = _strip_file(os.path.join(os.path.abspath(config['project']), 'scripts'))
+    names = _wildcard_expand(name, lines)
+    for corner in corners.split():
+        config['current_corner'] = corner
+        for name in names:
+            fullname = os.path.join(os.path.abspath(config['project']), name + '.py')
+            print('Simulating %s at corner %s.' % (name, corner))
+            #execfile(fullname)
+            exec(open(fullname, 'r').read(), globals(), locals())
+
 # Plotting
 
 def plot(name):
@@ -202,34 +242,41 @@ def plot(name):
     * Add subpaths
     """
     fp = open(os.path.join(os.path.abspath(config['project']), 'plots'), 'r')
+    found = False
     for line in fp:
-        lsplit = line.split()
-        if len(lsplit) > 0 and lsplit[0] == name:
+        if line.startswith(name) and line[len(name)] in [',', ' ']:
+            found = True
             break
     fp.close()
-    if line:
-        lsplit = line.strip().split(',')
+    if not found:
+        print('Warning: Can\'t find plot', name)
+        return
+    lsplit = line.strip().split(',')
+    try:
         names, title, xlabel, ylabel = lsplit[:4]
-        if len(lsplit) > 4:
-            mplcmds = reduce(lambda x, y: x + ',' + y, lsplit[4:])
-        else:
-            mplcmds = ''
-        plt.clf()
-        plt.title(title)
-        plt.xlabel(xlabel)
-        xunits = _extract_units(xlabel)
-        plt.ylabel(ylabel)
-        yunits = _extract_units(ylabel)
-        lnames = names.split()
-        for corner in config['corners'].split():
-            cdir = os.path.join(_results_dir(), corner)
-            wnames = []
-            for lname in lnames:
-                wnames = wnames + _wildcard_expand(lname, os.listdir(cdir))
-            for wname in wnames:
-                w = read_wave(wname, corner)
-                plt.plot(w[:,0]*xunits, w[:,1]*yunits)
-        plt.show()
+    except:
+        print('Warning: Improper plot file syntax', line)
+        return
+    if len(lsplit) > 4:
+        mplcmds = reduce(lambda x, y: x + ',' + y, lsplit[4:])
+    else:
+        mplcmds = ''
+    plt.clf()
+    plt.title(title)
+    plt.xlabel(xlabel)
+    xunits = _extract_units(xlabel)
+    plt.ylabel(ylabel)
+    yunits = _extract_units(ylabel)
+    lnames = names.split()
+    for corner in config['corners'].split():
+        cdir = os.path.join(_results_dir(), corner)
+        wnames = []
+        for lname in lnames:
+            wnames = wnames + _wildcard_expand(lname, os.listdir(cdir))
+        for wname in wnames:
+            w = read_wave(wname, corner)
+            plt.plot(w[:,0]*xunits, w[:,1]*yunits)
+    plt.show()
    
 # Printing
 
@@ -284,7 +331,6 @@ def print_specs(ttype='mtm'):
                             line = line + ','
                     smin = unit_adj(smin, units)
                     smax = unit_adj(smax, units)
-                    print(ds_min, ds_max, smin, smax)
                     res = '-'
                     if ds_min and smin < float(ds_min):
                         res = 'F'
