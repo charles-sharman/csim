@@ -38,13 +38,14 @@ def _results_dir():
     global config
     return os.path.join(os.path.abspath(config['project']), 'results')
 
-def _wildcard_expand(name, possibles):
+def _wildcard_expand(name, possibles, must=True):
     """
     Returns a subset of possibles that satisfy name
+    must=True forces name to be in possibles, even without a wildcard
     """
     lname = name.split('*')
     if len(lname) == 1:
-        if lname[0] in possibles:
+        if (not must) or (must and lname[0] in possibles):
             return lname
         else:
             return []
@@ -107,10 +108,13 @@ def wave(xs, ys):
 
 def value(w, x):
     """
-    Returns the linearly interpolated y for a given x
+    Returns the linearly interpolated y for a given x.  Assumes x is
+    always increasing or decreasing.
     """
-    
-    return np.interp(x, w[:,0], w[:,1])
+    if w[1, 0] > w[0, 0]:
+        return np.interp(x, w[:,0], w[:,1])
+    else:
+        return np.interp(x, w[::-1][:,0], w[::-1][:,1])
 
 def clip(w, x1, x2):
     """
@@ -130,15 +134,15 @@ def crosses(w, y, edge=0):
     xs = greater[1:] - greater[:-1]
     if edge > 0.5:
         xs = xs > 0
-    elif edge < 0.5:
+    elif edge < -0.5:
         xs = xs < 0
     else:
-        xs = np.abs(xs)
-    indices = np.nonzero(xs)
-    twave = np.array((w[:,1], w[:,0]))
+        xs = np.abs(xs) > 0
+    indices = np.nonzero(xs.astype(np.int))
+    twave = np.transpose((w[:,1], w[:,0]))
     retval = []
-    for index in indices:
-        retval.append(value(twave[index-1:index,:], y))
+    for index in indices[0]:
+        retval.append(value(twave[index:index+2], y))
     return np.array(retval)
 
 # I/O
@@ -222,7 +226,7 @@ def script(name, corners=''):
     if corners=='':
         corners = config['corners']
     lines = _strip_file(os.path.join(os.path.abspath(config['project']), 'scripts'))
-    names = _wildcard_expand(name, lines)
+    names = _wildcard_expand(name, lines, must=False)
     for corner in corners.split():
         config['current_corner'] = corner
         for name in names:
@@ -258,9 +262,9 @@ def plot(name):
         print('Warning: Improper plot file syntax', line)
         return
     if len(lsplit) > 4:
-        mplcmds = reduce(lambda x, y: x + ',' + y, lsplit[4:])
+        mplcmds = lsplit[4].split(';')
     else:
-        mplcmds = ''
+        mplcmds = []
     plt.clf()
     plt.title(title)
     plt.xlabel(xlabel)
@@ -276,7 +280,7 @@ def plot(name):
         for wname in wnames:
             w = read_wave(wname, corner)
             plt.plot(w[:,0]*xunits, w[:,1]*yunits)
-    for mplcmd in mplcmds.split(';'):
+    for mplcmd in mplcmds:
         eval('plt.' + mplcmd)
     plt.show()
    
