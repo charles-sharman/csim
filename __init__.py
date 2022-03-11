@@ -276,6 +276,8 @@ def plot(name):
         for wname in wnames:
             w = read_wave(wname, corner)
             plt.plot(w[:,0]*xunits, w[:,1]*yunits)
+    for mplcmd in mplcmds.split(';'):
+        eval('plt.' + mplcmd)
     plt.show()
    
 # Printing
