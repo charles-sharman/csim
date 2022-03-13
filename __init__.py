@@ -41,7 +41,7 @@ def _results_dir():
 def _wildcard_expand(name, possibles, must=True):
     """
     Returns a subset of possibles that satisfy name
-    must=True forces name to be in possibles, even without a wildcard
+        must=True forces name to be in possibles, even without a wildcard
     """
     lname = name.split('*')
     if len(lname) == 1:
@@ -237,12 +237,12 @@ def script(name, corners=''):
 
 # Plotting
 
-def plot(name):
+def plot(name, max_labels=6):
     """
     Plots a waveform in the plots file
+        max_labels limits the number of legends to show
 
     TODO:
-    * Add mplcmds
     * Add subpaths
     """
     fp = open(os.path.join(os.path.abspath(config['project']), 'plots'), 'r')
@@ -272,7 +272,8 @@ def plot(name):
     plt.ylabel(ylabel)
     yunits = _extract_units(ylabel)
     lnames = names.split()
-    for corner in config['corners'].split():
+    corners = config['corners'].split()
+    for corner in corners:
         cdir = os.path.join(_results_dir(), corner)
         wnames = []
         if os.path.isdir(cdir):
@@ -281,11 +282,13 @@ def plot(name):
                 wnames = wnames + _wildcard_expand(lname, possibles)
         for wname in wnames:
             w = read_wave(wname, corner)
-            plt.plot(w[:,0]*xunits, w[:,1]*yunits)
+            plt.plot(w[:,0]*xunits, w[:,1]*yunits, label=corner)
     for mplcmd in mplcmds:
         eval('plt.' + mplcmd)
+    if len(corners) <= max_labels:
+        plt.legend()
     plt.show()
-   
+
 # Printing
 
 def print_specs(ttype='mtm'):
