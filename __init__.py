@@ -262,7 +262,7 @@ def plot(name):
         print('Warning: Improper plot file syntax', line)
         return
     if len(lsplit) > 4:
-        mplcmds = lsplit[4].split(';')
+        mplcmds = ','.join(lsplit[4:]).split(';')
     else:
         mplcmds = []
     plt.clf()
@@ -275,8 +275,10 @@ def plot(name):
     for corner in config['corners'].split():
         cdir = os.path.join(_results_dir(), corner)
         wnames = []
-        for lname in lnames:
-            wnames = wnames + _wildcard_expand(lname, os.listdir(cdir))
+        if os.path.isdir(cdir):
+            possibles = os.listdir(cdir)
+            for lname in lnames:
+                wnames = wnames + _wildcard_expand(lname, possibles)
         for wname in wnames:
             w = read_wave(wname, corner)
             plt.plot(w[:,0]*xunits, w[:,1]*yunits)
@@ -295,14 +297,13 @@ def print_specs(ttype='mtm'):
     """
     global config
     tables = {}
-    corners = config['corners']
+    corners = config['corners'].split()
     for corner in corners:
         tables[corner] = _read_specs(corner)
-    try:
-        typical_corner = config['typical_corner']
-    except:
-        print('Warning: Typical corner unspecified')
-        typical_corner = ''
+    typical_corner = config['typical_corner']
+    if typical_corner == '':
+        print('Warning: Typical corner unspecified--choosing', corners[0])
+        typical_corner = corners[0]
     stable = ''
     fp = open(os.path.join(os.path.abspath(config['project']), 'specs'), 'r')
     for line in fp:
@@ -317,41 +318,46 @@ def print_specs(ttype='mtm'):
                     print('Warning: Can\'t parse', line)
                     name = None
                 if name:
-                    smin = np.inf
-                    smax = -np.inf
-                    try:
-                        styp = '%.4g' % unit_adj(tables[typical_corner][name], units)
-                    except:
-                        styp = ''
+                    styp = tables[typical_corner].get(name, '')
+                    smin = styp
+                    smax = styp
                     line = ''
                     for corner in corners:
                         value = tables[corner].get(name, '')
                         if value != '':
-                            if value < smin:
+                            if smin == '' or value < smin:
                                 smin = value
-                            if value > smax:
+                            if smax == '' or value > smax:
                                 smax = value
                             if ttype == 'all':
                                 line = line + '%.4g,' % unit_adj(value, units)
-                        elif ttype != 'mtm':
+                        elif ttype == 'all':
                             line = line + ','
-                    smin = unit_adj(smin, units)
-                    smax = unit_adj(smax, units)
+                    if smin != '':
+                        smin = unit_adj(smin, units)
+                    if smax != '':
+                        smax = unit_adj(smax, units)
                     res = '-'
-                    if ds_min and smin < float(ds_min):
+                    if ds_min and smin != '' and smin < float(ds_min):
                         res = 'F'
-                    if ds_max and smax > float(ds_max):
+                    if ds_max and smax != '' and smax > float(ds_max):
                         res = 'F'
                     if ds_typ and (ds_typ[0] == '<'):
                         ds_typ = ds_typ[1:]
-                        if smax > float(ds_typ):
+                        if smax != '' and smax > float(ds_typ):
                             res = 'F'
                     if ds_typ and (ds_typ[0] == '>'):
                         ds_typ = ds_typ[1:]
-                        if smin < float(ds_typ):
+                        if smin != '' and smin < float(ds_typ):
                             res = 'F'
                     if ttype == 'mtm':
-                        line = '%.4g,%s,%.4g,' % (smin, styp, smax)
+                        if styp != '':
+                            styp = '%.4g' % unit_adj(styp, units)
+                        if smin != '':
+                            smin = '%.4g' % smin
+                        if smax != '':
+                            smax = '%.4g' % smax
+                        line = '%s,%s,%s,' % (smin, styp, smax)
                     stable = stable + '%s,%s,%s,%s,%s%s,%s\n' % (title, ds_min, ds_typ, ds_max, line, units, res)
     return stable
 
