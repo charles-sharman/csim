@@ -235,9 +235,9 @@ def script(name, corners=''):
             #execfile(fullname)
             exec(open(fullname, 'r').read(), globals(), locals())
 
-# Plotting
+# Results
 
-def plot(name, max_labels=6):
+def plot(name, corners='', max_labels=6):
     """
     Plots a waveform in the plots file
         max_labels limits the number of legends to show
@@ -245,6 +245,8 @@ def plot(name, max_labels=6):
     TODO:
     * Add subpaths
     """
+    if corners=='':
+        corners = config['corners']
     fp = open(os.path.join(os.path.abspath(config['project']), 'plots'), 'r')
     found = False
     for line in fp:
@@ -272,7 +274,7 @@ def plot(name, max_labels=6):
     plt.ylabel(ylabel)
     yunits = _extract_units(ylabel)
     lnames = names.split()
-    corners = config['corners'].split()
+    corners = corners.split()
     for corner in corners:
         cdir = os.path.join(_results_dir(), corner)
         wnames = []
@@ -289,18 +291,19 @@ def plot(name, max_labels=6):
         plt.legend()
     plt.show()
 
-# Printing
-
-def print_specs(ttype='mtm'):
+def specs(ttype='mtm', corners=''):
     """
-    Returns a text spec table. ttype is either mtm (min/typ/max) or all.
+    Returns a csv spec table. ttype is either mtm (min/typ/max) or all.
 
     TODO:
     * Add subpaths
     """
     global config
+
+    if corners=='':
+        corners = config['corners']
     tables = {}
-    corners = config['corners'].split()
+    corners = corners.split()
     for corner in corners:
         tables[corner] = _read_specs(corner)
     typical_corner = config['typical_corner']
@@ -363,6 +366,8 @@ def print_specs(ttype='mtm'):
                         line = '%s,%s,%s,' % (smin, styp, smax)
                     stable = stable + '%s,%s,%s,%s,%s%s,%s\n' % (title, ds_min, ds_typ, ds_max, line, units, res)
     return stable
+
+# Printing
 
 def print_plots():
     pass
