@@ -20,6 +20,7 @@ View LICENSE for details.
 from __future__ import print_function
 
 import os
+import copy
 import numpy as np
 import matplotlib.pyplot as plt
 plt.ion()
@@ -41,7 +42,8 @@ def _results_dir():
 def _wildcard_expand(name, possibles, must=True):
     """
     Returns a subset of possibles that satisfy name
-        must=True forces name to be in possibles, even without a wildcard
+
+    :param must: True forces name to be in possibles, even without a wildcard
     """
     lname = name.split('*')
     if len(lname) == 1:
@@ -128,7 +130,8 @@ def clip(w, x1, x2):
 def crosses(w, y, edge=0):
     """
     Returns the x for a given y
-      edge is 1 (positive), -1 (negative), 0 (either)
+
+    :param edge: 1 (positive), -1 (negative), 0 (either)
     """
     greater = (w[:,1] > y).astype(np.int)
     xs = greater[1:] - greater[:-1]
@@ -149,9 +152,15 @@ def crosses(w, y, edge=0):
 
 def _set_corner(corner=''):
     global config
-    if corner=='':
+    if corner == '':
         corner = config['current_corner']
     return corner
+
+def _set_corners(corners=''):
+    global config
+    if corners == '':
+        corners = config['corners']
+    return corners.split()
 
 def _check_dir(corner):
     write_dir = os.path.join(_results_dir(), corner)
@@ -222,29 +231,33 @@ def write_wave(w, name, corner=''):
 
 def script(name, corners=''):
     global config
-    
-    if corners=='':
-        corners = config['corners']
+
+    corners = _set_corners(corners)
     lines = _strip_file(os.path.join(os.path.abspath(config['project']), 'scripts'))
     names = _wildcard_expand(name, lines, must=False)
-    for corner in corners.split():
-        config['current_corner'] = corner
-        for name in names:
-            fullname = os.path.join(os.path.abspath(config['project']), name + '.py')
+    t0 = time.time()
+    print('Simulating %s at corners %s.' % (names, ' '.join(corners)))
+    for name in names:
+        fullname = os.path.join(os.path.abspath(config['project']), name + '.py')
+        for corner in corners:
+            config['current_corner'] = corner
             print('Simulating %s at corner %s.' % (name, corner))
             #execfile(fullname)
             exec(open(fullname, 'r').read(), globals(), locals())
+    print('Complete in %.1f seconds.' % (time.time() - t0))
 
-# Plotting
+# Results
 
-def plot(name, max_labels=6):
+def plot(name, corners='', max_labels=6):
     """
     Plots a waveform in the plots file
-        max_labels limits the number of legends to show
 
     TODO:
     * Add subpaths
+
+    :param max_labels: limits the number of legends to show
     """
+    corners = _set_corners(corners)
     fp = open(os.path.join(os.path.abspath(config['project']), 'plots'), 'r')
     found = False
     for line in fp:
@@ -272,7 +285,6 @@ def plot(name, max_labels=6):
     plt.ylabel(ylabel)
     yunits = _extract_units(ylabel)
     lnames = names.split()
-    corners = config['corners'].split()
     for corner in corners:
         cdir = os.path.join(_results_dir(), corner)
         wnames = []
@@ -289,18 +301,19 @@ def plot(name, max_labels=6):
         plt.legend()
     plt.show()
 
-# Printing
-
-def print_specs(ttype='mtm'):
+def specs(ttype='mtm', corners=''):
     """
-    Returns a text spec table. ttype is either mtm (min/typ/max) or all.
+    Returns a csv spec table. ttype is either mtm (min/typ/max) or all.
 
     TODO:
     * Add subpaths
+
+    :param ttype: 'mtm' for min/typ/max results or 'all' for every corner
     """
     global config
+
+    corners = _set_corners(corners)
     tables = {}
-    corners = config['corners'].split()
     for corner in corners:
         tables[corner] = _read_specs(corner)
     typical_corner = config['typical_corner']
@@ -364,20 +377,26 @@ def print_specs(ttype='mtm'):
                     stable = stable + '%s,%s,%s,%s,%s%s,%s\n' % (title, ds_min, ds_typ, ds_max, line, units, res)
     return stable
 
+# Printing
+
 def print_plots():
     pass
 
 def print_schematics():
     pass
 
-def print_desrev():
+def print_desrev(title_slide=0, content_slide=2, specs_per_slide=7):
     """
     Prints specs, schematics, and plots to a pptx
     template format:
         Slide 1: Title
         Slide 2: Bullets
-        Slide 3: Spec
-        Slide 4: Image
+        Slide 3: Specs
+        Slide 4: Plots
+
+    :param title_slide: the layout index of the title slide
+    :param content_slide: the layout index of the content slide
+    :param specs_per_slide: the number of specs and rows per spec slide
     """
     def _add_row(tbl):
         # Dangerous to use lower-level routines
@@ -398,7 +417,38 @@ def print_desrev():
             cell.margin_bottom = cp_cell.margin_bottom
             cell.vertical_anchor = cp_cell.vertical_anchor
         """
-        
+
+    def _dup_slide(local_prs, index):
+        # Dangerous to use lower-level routines
+        #https://stackoverflow.com/questions/50866634/python-pptx-copy-slide
+        template = local_prs.slides[index]
+        #try:
+        #    blank_slide_layout = pres.slide_layouts[12]
+        #except:
+        #    blank_slide_layout = pres.slide_layouts[len(pres.slide_layouts)]
+
+        copied_slide = local_prs.slides.add_slide(local_prs.slide_layouts[index])
+
+        for shp in template.shapes:
+            el = shp.element
+            newel = copy.deepcopy(el)
+            copied_slide.shapes._spTree.insert_element_before(newel, 'p:extLst')
+
+        #print(template.part.rels.items())
+        for value in template.part.rels:
+            # Make sure we don't copy a notesSlide relation as that won't exist
+            print(value.reltype)
+            if "notesSlide" not in value.reltype:
+                #copied_slide.part.rels.add_relationship(
+                #    value.reltype,
+                #    value._target,
+                #    value.rId
+                #)
+                copied_slide.part.rels.get_or_add(value.reltype, value._target)
+
+        return copied_slide
+
+    emus_per_inch = 914400.0
     #print_specs()
     #print_schematics()
     #print_plots()
@@ -409,16 +459,57 @@ def print_desrev():
     if not os.path.isdir(write_dir):
         os.makedirs(write_dir)
 
+    # Title
+    slide = prs.slides.add_slide(prs.slide_layouts[title_slide])
+
     # Specs
-    slide = prs.slides[2] # Specs should be on slide 2
-    table = slide.shapes[1].table # The table should be the second shape
-    y = len(table.rows)
-    rows_per_slide = 7 # Excludes title
-    specs = print_specs()
-    row_specs = specs.split('\n')
-    num_slides = int(np.ceil(float(len(row_specs)) / rows_per_slide))
-    #print('num_slides', num_slides)
-    #row_title = 'Spec,Spec Min,Spec Typ,Spec Max,Res Min,Res Typ,Res Max,Units,Flag'
+    #slide = prs.slides[specs_slide]
+    #rows_per_slide = len(slide.shapes[index_table].table.rows)-1 # Assumes table is the second index and the top row is reserved for the title
+    row_specs = specs().strip().split('\n')
+    num_slides = int(np.ceil(float(len(row_specs)) / specs_per_slide))
+    for index_slide in range(num_slides):
+        # 0 has 0 shapes, 1 has 2 shapes, 2 has 2 shapes, 3 has 3 shapes, 4 has 1 shape
+        slide = prs.slides.add_slide(prs.slide_layouts[content_slide])
+        slide.shapes.title.text = 'Specs'
+        ph = slide.shapes[1]
+        #shape = slide.shapes[0].insert_table(cols=9, rows=1+specs_per_slide)
+        slide_rows = row_specs[specs_per_slide*index_slide:specs_per_slide*(index_slide+1)]
+        num_rows = 1 + len(slide_rows)
+        print(slide.shapes[0].width, slide.shapes[1].width, num_rows)
+        shape = slide.shapes.add_table(num_rows, 9, ph.left, ph.top, ph.width, num_rows*370480)
+        table = shape.table
+        contents = 'Spec,Spec Min,Spec Typ,Spec Max,Res Min,Res Typ,Res Max,Units,Flag'
+        for x, content in enumerate(contents.split(',')):
+            table.cell(0, x).text = content
+        for y, contents in enumerate(slide_rows):
+            for x, content in enumerate(contents.split(',')):
+                table.cell(y+1, x).text = content
+
+    # Schematics
+
+    # Plots
+    lines = _strip_file(os.path.join(os.path.abspath(config['project']), 'plots'))
+    for line in lines:
+        name = line.split()[0]
+        plot(name)
+        plt.savefig(name + '.png')
+        slide = prs.slides.add_slide(prs.slide_layouts[content_slide])
+        slide.shapes.title.text = 'Plots'
+        ph = slide.shapes[1]
+        fig_width, fig_height = plt.gcf().get_size_inches() * emus_per_inch
+        if (fig_width / ph.width) < (fig_height / ph.height): # height max
+            width = (ph.height / fig_height) * fig_width
+            height = ph.height
+            left = ph.left + (ph.width - width) / 2
+            top = ph.top
+        else: # width max
+            width = ph.width
+            height = (ph.width / fig_width) * fig_height
+            left = ph.left
+            top = ph.top + (ph.height - height) / 2
+        slide.shapes.add_picture(name + '.png', left, top, width, height)
+
+    """
     for index_slide in range(num_slides):
         #slide = prs.slides.add_slide(prs.slide_layouts[5]) # title only
         if index_slide == num_slides-1: # last slide
@@ -434,8 +525,6 @@ def print_desrev():
                 cell = table.cell(y, x)
                 cell.text = content
             y = y + 1
+    """
 
-    # Schematics
-
-    # Plots
     prs.save(os.path.join(write_dir, 'desrev.pptx'))
