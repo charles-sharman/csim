@@ -257,7 +257,12 @@ def plot(name, corners='', max_labels=6):
 
     :param max_labels: limits the number of legends to show
     """
+<<<<<<< HEAD
     corners = _set_corners(corners)
+=======
+    if corners=='':
+        corners = config['corners']
+>>>>>>> 6f59cd04f2735b8b80a5369c4b417e4b00ec6589
     fp = open(os.path.join(os.path.abspath(config['project']), 'plots'), 'r')
     found = False
     for line in fp:
@@ -285,6 +290,10 @@ def plot(name, corners='', max_labels=6):
     plt.ylabel(ylabel)
     yunits = _extract_units(ylabel)
     lnames = names.split()
+<<<<<<< HEAD
+=======
+    corners = corners.split()
+>>>>>>> 6f59cd04f2735b8b80a5369c4b417e4b00ec6589
     for corner in corners:
         cdir = os.path.join(_results_dir(), corner)
         wnames = []
@@ -312,8 +321,15 @@ def specs(ttype='mtm', corners=''):
     """
     global config
 
+<<<<<<< HEAD
     corners = _set_corners(corners)
     tables = {}
+=======
+    if corners=='':
+        corners = config['corners']
+    tables = {}
+    corners = corners.split()
+>>>>>>> 6f59cd04f2735b8b80a5369c4b417e4b00ec6589
     for corner in corners:
         tables[corner] = _read_specs(corner)
     typical_corner = config['typical_corner']
