@@ -29,9 +29,13 @@ try:
 except:
     print('Warning: Can\'t find pptx')
     pptx = None
-import copy
+try:
+    for PIL import Image
+except:
+    print('Warning: Can\'t find PIL')
+    Image = None
 
-config = {'project': '.', 'corners': '', 'typical_corner': '', 'current_corner': ''}
+config = {'project': '.', 'corners': '', 'typical_corner': '', 'current_corner': '', 'scripts': []}
 
 # Local Functions
 
@@ -233,7 +237,7 @@ def script(name, corners=''):
     global config
 
     corners = _set_corners(corners)
-    lines = _strip_file(os.path.join(os.path.abspath(config['project']), 'scripts'))
+    lines = config.get('scripts', [])
     names = _wildcard_expand(name, lines, must=False)
     t0 = time.time()
     print('Simulating %s at corners %s.' % (names, ' '.join(corners)))
@@ -367,6 +371,9 @@ def specs(ttype='mtm', corners=''):
                         if smin != '' and smin < float(ds_typ):
                             res = 'F'
                     if ttype == 'mtm':
+                        if len(corners) <= 1:
+                            smin = ''
+                            smax = ''
                         if styp != '':
                             styp = '%.4g' % unit_adj(styp, units)
                         if smin != '':
@@ -398,57 +405,22 @@ def print_desrev(title_slide=0, content_slide=2, specs_per_slide=7):
     :param content_slide: the layout index of the content slide
     :param specs_per_slide: the number of specs and rows per spec slide
     """
-    def _add_row(tbl):
-        # Dangerous to use lower-level routines
-        row = tbl._tbl.add_tr(table.rows[0].height)
-        #index = len(tbl.rows)
-        #cp_cell = table.cell(0, 0)
-        #cp_cell = tbl._tbl.tc(0, 0)
-        for col in range(9):
-            cell = row.add_tc()
-            #cell.get_or_add_tcPr(cp_cell.tcPr)
-        """
-        for col in range(9):
-            cell = table.cell(col, index)
-            #cell.fill = copy(cp_cell.fill)
-            cell.margin_left = cp_cell.margin_left
-            cell.margin_right = cp_cell.margin_right
-            cell.margin_top = cp_cell.margin_top
-            cell.margin_bottom = cp_cell.margin_bottom
-            cell.vertical_anchor = cp_cell.vertical_anchor
-        """
-
-    def _dup_slide(local_prs, index):
-        # Dangerous to use lower-level routines
-        #https://stackoverflow.com/questions/50866634/python-pptx-copy-slide
-        template = local_prs.slides[index]
-        #try:
-        #    blank_slide_layout = pres.slide_layouts[12]
-        #except:
-        #    blank_slide_layout = pres.slide_layouts[len(pres.slide_layouts)]
-
-        copied_slide = local_prs.slides.add_slide(local_prs.slide_layouts[index])
-
-        for shp in template.shapes:
-            el = shp.element
-            newel = copy.deepcopy(el)
-            copied_slide.shapes._spTree.insert_element_before(newel, 'p:extLst')
-
-        #print(template.part.rels.items())
-        for value in template.part.rels:
-            # Make sure we don't copy a notesSlide relation as that won't exist
-            print(value.reltype)
-            if "notesSlide" not in value.reltype:
-                #copied_slide.part.rels.add_relationship(
-                #    value.reltype,
-                #    value._target,
-                #    value.rId
-                #)
-                copied_slide.part.rels.get_or_add(value.reltype, value._target)
-
-        return copied_slide
+    
+    def _im_scale(ph, fig):
+        if (fig[0] / ph.width) < (fig[1] / ph.height): # height max
+            width = (ph.height / fig[1]) * fig[0]
+            height = ph.height
+            left = ph.left + (ph.width - width) / 2
+            top = ph.top
+        else: # width max
+            width = ph.width
+            height = (ph.width / fig[0]) * fig[1]
+            left = ph.left
+            top = ph.top + (ph.height - height) / 2
+        return left, top, width, height
 
     emus_per_inch = 914400.0
+    schematic_dpi = 300.0
     #print_specs()
     #print_schematics()
     #print_plots()
@@ -486,6 +458,15 @@ def print_desrev(title_slide=0, content_slide=2, specs_per_slide=7):
                 table.cell(y+1, x).text = content
 
     # Schematics
+    sdir = os.path.join(os.path.abspath(config['project']), 'schematics')
+    schematics = os.listdir(sdir)
+    for schematic in schematics:
+        slide = prs.slides.add_slide(prs.slide_layouts[content_slide])
+        slide.shapes.title.text = 'Schematics: %s' % os.path.splitext(schematic)[0]
+        im = Image.open(schematic)
+        left, top, width, height = _im_scale(slide.shapes[1], np.array(im.size)*(emus_per_inch / schematic_dpi))
+        im.close()
+        slide.shapes.add_picture(schematic, left, top, width, height)
 
     # Plots
     lines = _strip_file(os.path.join(os.path.abspath(config['project']), 'plots'))
@@ -494,37 +475,8 @@ def print_desrev(title_slide=0, content_slide=2, specs_per_slide=7):
         plot(name)
         plt.savefig(name + '.png')
         slide = prs.slides.add_slide(prs.slide_layouts[content_slide])
-        slide.shapes.title.text = 'Plots'
-        ph = slide.shapes[1]
-        fig_width, fig_height = plt.gcf().get_size_inches() * emus_per_inch
-        if (fig_width / ph.width) < (fig_height / ph.height): # height max
-            width = (ph.height / fig_height) * fig_width
-            height = ph.height
-            left = ph.left + (ph.width - width) / 2
-            top = ph.top
-        else: # width max
-            width = ph.width
-            height = (ph.width / fig_width) * fig_height
-            left = ph.left
-            top = ph.top + (ph.height - height) / 2
+        slide.shapes.title.text = 'Plots: %s' % line.split()[1]
+        left, top, width, height = _im_scale(slide.shapes[1], plt.gcf().get_size_inches() * emus_per_inch)
         slide.shapes.add_picture(name + '.png', left, top, width, height)
-
-    """
-    for index_slide in range(num_slides):
-        #slide = prs.slides.add_slide(prs.slide_layouts[5]) # title only
-        if index_slide == num_slides-1: # last slide
-            num_rows = len(row_specs) % rows_per_slide
-        else:
-            num_rows = rows_per_slide
-        #shape = slide.shapes.add_table(rows=num_rows+1, cols=9)
-        slide_rows = row_specs[rows_per_slide*index_slide:rows_per_slide*(index_slide+1)]
-        #slide_rows.insert(0, row_title)
-        for contents in slide_rows:
-            _add_row(table)
-            for x, content in enumerate(contents.split(',')):
-                cell = table.cell(y, x)
-                cell.text = content
-            y = y + 1
-    """
 
     prs.save(os.path.join(write_dir, 'desrev.pptx'))
