@@ -21,6 +21,7 @@ from __future__ import print_function
 
 import os
 import copy
+import time
 import numpy as np
 import matplotlib.pyplot as plt
 plt.ion()
@@ -30,7 +31,7 @@ except:
     print('Warning: Can\'t find pptx')
     pptx = None
 try:
-    for PIL import Image
+    from PIL import Image
 except:
     print('Warning: Can\'t find PIL')
     Image = None
@@ -289,6 +290,7 @@ def plot(name, corners='', max_labels=6):
     plt.ylabel(ylabel)
     yunits = _extract_units(ylabel)
     lnames = names.split()
+    wnames = []
     for corner in corners:
         cdir = os.path.join(_results_dir(), corner)
         wnames = []
@@ -349,9 +351,11 @@ def specs(ttype='mtm', corners=''):
                     smin = styp
                     smax = styp
                     line = ''
+                    num_corners = 0
                     for corner in corners:
                         value = tables[corner].get(name, '')
                         if value != '':
+                            num_corners = num_corners + 1
                             if smin == '' or value < smin:
                                 smin = value
                             if smax == '' or value > smax:
@@ -378,15 +382,16 @@ def specs(ttype='mtm', corners=''):
                         if smin != '' and smin < float(ds_typ):
                             res = 'F'
                     if ttype == 'mtm':
-                        if len(corners) <= 1:
-                            smin = ''
-                            smax = ''
                         if styp != '':
                             styp = '%.4g' % unit_adj(styp, units)
-                        if smin != '':
+                        if smin != '' and num_corners > 1:
                             smin = '%.4g' % smin
-                        if smax != '':
+                        else:
+                            smin = ''
+                        if smax != '' and num_corners > 1:
                             smax = '%.4g' % smax
+                        else:
+                            smax = ''
                         line = '%s,%s,%s,' % (smin, styp, smax)
                     stable = stable + '%s,%s,%s,%s,%s%s,%s\n' % (title, ds_min, ds_typ, ds_max, line, units, res)
     return stable
