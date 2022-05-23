@@ -36,7 +36,7 @@ except:
     print('Warning: Can\'t find PIL')
     Image = None
 
-config = {'project': '.', 'corners': '', 'typical_corner': '', 'current_corner': '', 'scripts': []}
+config = {'project': '.', 'corners': '', 'typical_corner': '', 'current_corner': '', 'scripts': ''}
 
 # Local Functions
 
@@ -238,7 +238,7 @@ def script(name, corners=''):
     global config
 
     corners = _set_corners(corners)
-    lines = config.get('scripts', [])
+    lines = config.get('scripts', '').split()
     names = _wildcard_expand(name, lines, must=False)
     t0 = time.time()
     print('Simulating %s at corners %s.' % (names, ' '.join(corners)))
