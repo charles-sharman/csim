@@ -481,7 +481,7 @@ def print_desrev(title_slide=0, content_slide=2, specs_per_slide=7):
     for schematic in schematics:
         slide = prs.slides.add_slide(prs.slide_layouts[content_slide])
         slide.shapes.title.text = 'Schematics: %s' % os.path.splitext(schematic)[0]
-        im = Image.open(schematic)
+        im = Image.open(os.path.join(sdir, schematic))
         left, top, width, height = _im_scale(slide.shapes[1], np.array(im.size)*(emus_per_inch / schematic_dpi))
         im.close()
         slide.shapes.add_picture(schematic, left, top, width, height)
