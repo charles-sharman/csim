@@ -290,6 +290,7 @@ def plot(name, corners='', max_labels=6):
     yunits = _extract_units(ylabel)
     lnames = names.split()
     wnames = []
+    num_waves = 0
     for lname in lnames:
         pindex = lname[::-1].find('/')
         if pindex >= 0:
@@ -306,17 +307,18 @@ def plot(name, corners='', max_labels=6):
                 wnames = wnames + _wildcard_expand(lname, possibles)
             for wname in wnames:
                 w = read_wave(wname, corner)
-                if len(wnames) > 1:
-                    if len(corners) > 1:
+                if len(wnames) > 1 or len(lnames) > 1:
+                    if len(lcorners) > 1:
                         label = corner + '/' + wname
                     else:
                         label = wname
                 else:
                     label = corner
                 plt.plot(w[:,0]*xunits, w[:,1]*yunits, label=label)
+                num_waves = num_waves + 1
     for mplcmd in mplcmds:
         eval('plt.' + mplcmd)
-    if len(corners) * len(wnames) <= max_labels:
+    if num_waves <= max_labels:
         plt.legend()
     plt.show()
 
