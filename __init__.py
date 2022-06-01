@@ -493,6 +493,7 @@ def print_desrev(title_slide=0, content_slide=2, specs_per_slide=7):
     for line in lines:
         name = line.split()[0]
         plot(name)
+        name = name.replace('/', '_') # Can't handle / in name
         plt.savefig(name + '.png')
         slide = prs.slides.add_slide(prs.slide_layouts[content_slide])
         slide.shapes.title.text = 'Plots: %s' % line.split()[1]
