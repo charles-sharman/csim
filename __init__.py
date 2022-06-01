@@ -258,22 +258,21 @@ def plot(name, corners='', max_labels=6):
     Plots a waveform in the plots file
 
     TODO:
-    * Add subpaths
+    * Add plots from other sim directories
 
     :param max_labels: limits the number of legends to show
     """
     corners = _set_corners(corners)
-    fp = open(os.path.join(os.path.abspath(config['project']), 'plots'), 'r')
+    lines = _strip_file(os.path.join(os.path.abspath(config['project']), 'plots'))
     found = False
-    for line in fp:
+    for line in lines:
         if line.startswith(name) and line[len(name)] in [',', ' ']:
             found = True
             break
-    fp.close()
     if not found:
         print('Warning: Can\'t find plot', name)
         return
-    lsplit = line.strip().split(',')
+    lsplit = line.split(',')
     try:
         names, title, xlabel, ylabel = lsplit[:4]
     except:
@@ -291,23 +290,30 @@ def plot(name, corners='', max_labels=6):
     yunits = _extract_units(ylabel)
     lnames = names.split()
     wnames = []
-    for corner in corners:
-        cdir = os.path.join(_results_dir(), corner)
-        wnames = []
-        if os.path.isdir(cdir):
-            possibles = os.listdir(cdir)
-            for lname in lnames:
+    for lname in lnames:
+        pindex = lname[::-1].find('/')
+        if pindex >= 0:
+            pindex = len(lname) - 1 - pindex
+            lcorners = _wildcard_expand(lname[:pindex], corners)
+            lname = lname[pindex+1:]
+        else:
+            lcorners = corners[:]
+        for corner in lcorners:
+            cdir = os.path.abspath(os.path.join(config['project'], 'results', corner))
+            wnames = []
+            if os.path.isdir(cdir):
+                possibles = os.listdir(cdir)
                 wnames = wnames + _wildcard_expand(lname, possibles)
-        for wname in wnames:
-            w = read_wave(wname, corner)
-            if len(wnames) > 1:
-                if len(corners) > 1:
-                    label = corner + '/' + wname
+            for wname in wnames:
+                w = read_wave(wname, corner)
+                if len(wnames) > 1:
+                    if len(corners) > 1:
+                        label = corner + '/' + wname
+                    else:
+                        label = wname
                 else:
-                    label = wname
-            else:
-                label = corner
-            plt.plot(w[:,0]*xunits, w[:,1]*yunits, label=label)
+                    label = corner
+                plt.plot(w[:,0]*xunits, w[:,1]*yunits, label=label)
     for mplcmd in mplcmds:
         eval('plt.' + mplcmd)
     if len(corners) * len(wnames) <= max_labels:
@@ -319,7 +325,7 @@ def specs(ttype='mtm', corners=''):
     Returns a csv spec table. ttype is either mtm (min/typ/max) or all.
 
     TODO:
-    * Add subpaths
+    * Add specs from other sim directories
 
     :param ttype: 'mtm' for min/typ/max results or 'all' for every corner
     """
@@ -334,66 +340,64 @@ def specs(ttype='mtm', corners=''):
         print('Warning: Typical corner unspecified--choosing', corners[0])
         typical_corner = corners[0]
     stable = ''
-    fp = open(os.path.join(os.path.abspath(config['project']), 'specs'), 'r')
-    for line in fp:
-        line = line.strip()
-        if line:
-            if line.startswith('*'): # A Title
-                stable = stable + line + '\n'
-            else:
-                try:
-                    name, title, ds_min, ds_typ, ds_max, units = line.split(',')
-                except:
-                    print('Warning: Can\'t parse', line)
-                    name = None
-                if name:
-                    styp = tables[typical_corner].get(name, '')
-                    smin = styp
-                    smax = styp
-                    line = ''
-                    num_corners = 0
-                    for corner in corners:
-                        value = tables[corner].get(name, '')
-                        if value != '':
-                            num_corners = num_corners + 1
-                            if smin == '' or value < smin:
-                                smin = value
-                            if smax == '' or value > smax:
-                                smax = value
-                            if ttype == 'all':
-                                line = line + '%.4g,' % unit_adj(value, units)
-                        elif ttype == 'all':
-                            line = line + ','
-                    if smin != '':
-                        smin = unit_adj(smin, units)
-                    if smax != '':
-                        smax = unit_adj(smax, units)
-                    res = '-'
-                    if ds_min and smin != '' and smin < float(ds_min):
+    lines = _strip_file(os.path.join(os.path.abspath(config['project']), 'specs'))
+    for line in lines:
+        if line.startswith('*'): # A Title
+            stable = stable + line + '\n'
+        else:
+            try:
+                name, title, ds_min, ds_typ, ds_max, units = line.split(',')
+            except:
+                print('Warning: Can\'t parse', line)
+                name = None
+            if name:
+                styp = tables[typical_corner].get(name, '')
+                smin = styp
+                smax = styp
+                line = ''
+                num_corners = 0
+                for corner in corners:
+                    value = tables[corner].get(name, '')
+                    if value != '':
+                        num_corners = num_corners + 1
+                        if smin == '' or value < smin:
+                            smin = value
+                        if smax == '' or value > smax:
+                            smax = value
+                        if ttype == 'all':
+                            line = line + '%.4g,' % unit_adj(value, units)
+                    elif ttype == 'all':
+                        line = line + ','
+                if smin != '':
+                    smin = unit_adj(smin, units)
+                if smax != '':
+                    smax = unit_adj(smax, units)
+                res = '-'
+                if ds_min and smin != '' and smin < float(ds_min):
+                    res = 'F'
+                if ds_max and smax != '' and smax > float(ds_max):
+                    res = 'F'
+                if ds_typ and (ds_typ[0] == '<'):
+                    ds_typ = ds_typ[1:]
+                    if smax != '' and smax > float(ds_typ):
                         res = 'F'
-                    if ds_max and smax != '' and smax > float(ds_max):
+                if ds_typ and (ds_typ[0] == '>'):
+                    ds_typ = ds_typ[1:]
+                    if smin != '' and smin < float(ds_typ):
                         res = 'F'
-                    if ds_typ and (ds_typ[0] == '<'):
-                        ds_typ = ds_typ[1:]
-                        if smax != '' and smax > float(ds_typ):
-                            res = 'F'
-                    if ds_typ and (ds_typ[0] == '>'):
-                        ds_typ = ds_typ[1:]
-                        if smin != '' and smin < float(ds_typ):
-                            res = 'F'
-                    if ttype == 'mtm':
-                        if styp != '':
-                            styp = '%.4g' % unit_adj(styp, units)
-                        if smin != '' and num_corners > 1:
-                            smin = '%.4g' % smin
-                        else:
-                            smin = ''
-                        if smax != '' and num_corners > 1:
-                            smax = '%.4g' % smax
-                        else:
-                            smax = ''
-                        line = '%s,%s,%s,' % (smin, styp, smax)
-                    stable = stable + '%s,%s,%s,%s,%s%s,%s\n' % (title, ds_min, ds_typ, ds_max, line, units, res)
+                if ttype == 'mtm':
+                    if styp != '':
+                        styp = '%.4g' % unit_adj(styp, units)
+                    if smin != '' and num_corners > 1:
+                        smin = '%.4g' % smin
+                    else:
+                        smin = ''
+                    if smax != '' and num_corners > 1:
+                        smax = '%.4g' % smax
+                    else:
+                        smax = ''
+                    line = '%s,%s,%s,' % (smin, styp, smax)
+                stable = stable + '%s,%s,%s,%s,%s%s,%s\n' % (title, ds_min, ds_typ, ds_max, line, units, res)
     return stable
 
 # Printing
