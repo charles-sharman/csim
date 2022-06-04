@@ -404,13 +404,7 @@ def specs(ttype='mtm', corners=''):
 
 # Printing
 
-def print_plots():
-    pass
-
-def print_schematics():
-    pass
-
-def print_desrev(title_slide=0, content_slide=2, specs_per_slide=7):
+def desrev(title_slide=0, content_slide=2, specs_per_slide=7):
     """
     Prints specs, schematics, and plots to a pptx
     template format:
@@ -496,7 +490,7 @@ def print_desrev(title_slide=0, content_slide=2, specs_per_slide=7):
         name = name.replace('/', '_') # Can't handle / in name
         plt.savefig(name + '.png')
         slide = prs.slides.add_slide(prs.slide_layouts[content_slide])
-        slide.shapes.title.text = 'Plots: %s' % line.split()[1]
+        slide.shapes.title.text = 'Plots: %s' % line.split(',')[1]
         left, top, width, height = _im_scale(slide.shapes[1], plt.gcf().get_size_inches() * emus_per_inch)
         slide.shapes.add_picture(name + '.png', left, top, width, height)
 
