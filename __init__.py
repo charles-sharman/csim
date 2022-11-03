@@ -87,7 +87,7 @@ def _extract_units(s):
     Extracts the units from a label.
     """
     try:
-        units = s[s.find('(')+1]
+        units = s[s.index('(')+1]
     except:
         units = ' '
     return unit_adj(1, units)
@@ -404,64 +404,68 @@ def specs(ttype='mtm', corners=''):
 
 # Printing
 
-def desrev(title_slide=0, content_slide=2, specs_per_slide=7):
+def desrev():
     """
     Prints specs, schematics, and plots to a pptx
-    template format:
-        Slide 1: Title
-        Slide 2: Bullets
-        Slide 3: Specs
-        Slide 4: Plots
 
-    :param title_slide: the layout index of the title slide
-    :param content_slide: the layout index of the content slide
-    :param specs_per_slide: the number of specs and rows per spec slide
-    """
+    template.pptx must have a specific format.
+
+      Slides Expected:
+        Slide 1: Title
+        Slide 2: Specs (9 columns by your number of rows)
     
-    def _im_scale(ph, fig):
-        if (fig[0] / ph.width) < (fig[1] / ph.height): # height max
-            width = (ph.height / fig[1]) * fig[0]
-            height = ph.height
-            left = ph.left + (ph.width - width) / 2
-            top = ph.top
+      Master Slides Expected:
+        Title and Content
+        Title Only
+    """
+    global pptx, Image
+    
+    def _im_scale(cbox, fig):
+        if (fig[0] / cbox.width) < (fig[1] / cbox.height): # height max
+            width = (cbox.height / fig[1]) * fig[0]
+            height = cbox.height
+            left = cbox.left + (cbox.width - width) / 2
+            top = cbox.top
         else: # width max
-            width = ph.width
-            height = (ph.width / fig[0]) * fig[1]
-            left = ph.left
-            top = ph.top + (ph.height - height) / 2
+            width = cbox.width
+            height = (cbox.width / fig[0]) * fig[1]
+            left = cbox.left
+            top = cbox.top + (cbox.height - height) / 2
         return left, top, width, height
 
+    if not pptx:
+        print('Error: Can\'t generate desrev. Missing pptx.')
+        return
+    if not Image:
+        print('Error: Can\'t generate desrev. Missing PIL.')
+        return
     emus_per_inch = 914400.0
     schematic_dpi = 300.0
-    #print_specs()
-    #print_schematics()
-    #print_plots()
-    # Initialize
-    #prs = pptx.Presentation()
+    specs_slide = 1
     prs = pptx.Presentation('../template.pptx')
     write_dir = os.path.join(os.path.abspath(config['project']), 'reports')
     if not os.path.isdir(write_dir):
         os.makedirs(write_dir)
 
     # Title
-    slide = prs.slides.add_slide(prs.slide_layouts[title_slide])
+    #slide = prs.slides.add_slide(prs.slide_layouts.get_by_name('Title Slide'))
 
     # Specs
-    #slide = prs.slides[specs_slide]
-    #rows_per_slide = len(slide.shapes[index_table].table.rows)-1 # Assumes table is the second index and the top row is reserved for the title
+    table = prs.slides[specs_slide].shapes[1].table
+    specs_per_slide = len(table.rows)-1
+    column_widths = [x.width for x in table.columns]
     row_specs = specs().strip().split('\n')
     num_slides = int(np.ceil(float(len(row_specs)) / specs_per_slide))
+    cbox = prs.slide_layouts.get_by_name('Title and Content').shapes[1]
     for index_slide in range(num_slides):
-        # 0 has 0 shapes, 1 has 2 shapes, 2 has 2 shapes, 3 has 3 shapes, 4 has 1 shape
-        slide = prs.slides.add_slide(prs.slide_layouts[content_slide])
+        slide = prs.slides.add_slide(prs.slide_layouts.get_by_name('Title Only'))
         slide.shapes.title.text = 'Specs'
-        ph = slide.shapes[1]
-        #shape = slide.shapes[0].insert_table(cols=9, rows=1+specs_per_slide)
         slide_rows = row_specs[specs_per_slide*index_slide:specs_per_slide*(index_slide+1)]
         num_rows = 1 + len(slide_rows)
-        print(slide.shapes[0].width, slide.shapes[1].width, num_rows)
-        shape = slide.shapes.add_table(num_rows, 9, ph.left, ph.top, ph.width, num_rows*370480)
+        shape = slide.shapes.add_table(num_rows, 9, cbox.left, cbox.top, cbox.width, num_rows*370480)
         table = shape.table
+        for count in range(len(column_widths)):
+            table.columns[count].width = column_widths[count]
         contents = 'Spec,Spec Min,Spec Typ,Spec Max,Res Min,Res Typ,Res Max,Units,Flag'
         for x, content in enumerate(contents.split(',')):
             table.cell(0, x).text = content
@@ -473,12 +477,12 @@ def desrev(title_slide=0, content_slide=2, specs_per_slide=7):
     sdir = os.path.join(os.path.abspath(config['project']), 'schematics')
     schematics = os.listdir(sdir)
     for schematic in schematics:
-        slide = prs.slides.add_slide(prs.slide_layouts[content_slide])
+        slide = prs.slides.add_slide(prs.slide_layouts.get_by_name('Title Only'))
         slide.shapes.title.text = 'Schematics: %s' % os.path.splitext(schematic)[0]
         name = os.path.join(sdir, schematic)
         # Use PIL for scaling
         im = Image.open(name)
-        left, top, width, height = _im_scale(slide.shapes[1], np.array(im.size)*(emus_per_inch / schematic_dpi))
+        left, top, width, height = _im_scale(cbox, np.array(im.size)*(emus_per_inch / schematic_dpi))
         im.close()
         slide.shapes.add_picture(name, left, top, width, height)
 
@@ -488,10 +492,12 @@ def desrev(title_slide=0, content_slide=2, specs_per_slide=7):
         name = line.split()[0]
         plot(name)
         name = name.replace('/', '_') # Can't handle / in name
-        plt.savefig(name + '.png')
-        slide = prs.slides.add_slide(prs.slide_layouts[content_slide])
+        plt.savefig(os.path.join(write_dir, 'tmp.png'))
+        slide = prs.slides.add_slide(prs.slide_layouts.get_by_name('Title Only'))
         slide.shapes.title.text = 'Plots: %s' % line.split(',')[1]
-        left, top, width, height = _im_scale(slide.shapes[1], plt.gcf().get_size_inches() * emus_per_inch)
-        slide.shapes.add_picture(name + '.png', left, top, width, height)
+        left, top, width, height = _im_scale(cbox, plt.gcf().get_size_inches() * emus_per_inch)
+        slide.shapes.add_picture(os.path.join(write_dir, 'tmp.png'), left, top, width, height)
+    if len(lines) > 0:
+        os.remove(os.path.join(write_dir, 'tmp.png'))
 
     prs.save(os.path.join(write_dir, 'desrev.pptx'))
